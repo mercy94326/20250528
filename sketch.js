@@ -1,63 +1,139 @@
+// EdTech 手勢互動遊戲完整版
 let video;
-let facemesh;
+let handpose;
 let predictions = [];
-
-let emotion = "尚未偵測";
-let lastDetectedTime = 0;
+let bubbles = [];
+let score = 0;
+let timer = 60;
+let gameStarted = false;
+let lastBubbleTime = 0;
+let questionSet = [
+  { text: "教育科技強調科技與學習的整合", correct: true },
+  { text: "建構主義提倡學生主動建構知識", correct: true },
+  { text: "教育科技主要應用在學校硬體設備維修", correct: false },
+  { text: "多元智能理論與教育科技無關", correct: false },
+  { text: "教學媒體包含影片、AR、互動式模擬等", correct: true },
+  { text: "教學設計不需要考慮學生學習歷程", correct: false },
+  { text: "教育科技與課程設計可結合進行教學創新", correct: true }
+];
 
 function setup() {
-  createCanvas(640, 480).position((windowWidth - 640) / 2, (windowHeight - 480) / 2);
+  createCanvas(640, 480);
   video = createCapture(VIDEO);
   video.size(width, height);
   video.hide();
 
-  facemesh = ml5.facemesh(video, modelReady);
-  facemesh.on("predict", results => {
-    predictions = results;
-  });
-}
+  handpose = ml5.handpose(video, () => console.log("模型已載入"));
+  handpose.on("predict", results => predictions = results);
 
-function modelReady() {
-  console.log("模型載入完成！");
+  textAlign(CENTER, CENTER);
+  setInterval(() => {
+    if (gameStarted && timer > 0) timer--;
+  }, 1000);
 }
 
 function draw() {
   image(video, 0, 0, width, height);
+  fill(255);
+  textSize(20);
+  text(`分數：${score}  時間：${timer}`, width / 2, 20);
 
-  if (predictions.length > 0) {
-    const keypoints = predictions[0].scaledMesh;
-
-    // 嘴巴上下距離（驚訝/講話）
-    let topLip = keypoints[13];  // 上唇中心
-    let bottomLip = keypoints[14]; // 下唇中心
-    let mouthOpen = dist(topLip[0], topLip[1], bottomLip[0], bottomLip[1]);
-
-    // 眉毛與眼睛距離（皺眉）
-    let leftEye = keypoints[159];  // 左眼上緣
-    let leftBrow = keypoints[70];  // 左眉毛底
-    let browRaise = dist(leftEye[1], leftEye[0], leftBrow[1], leftBrow[0]);
-
-    // 根據距離簡單判斷
-    if (mouthOpen > 25 && browRaise < 20) {
-      emotion = "看起來很驚訝 😲";
-    } else if (browRaise < 10) {
-      emotion = "你是不是有點困惑 🤔";
-    } else if (mouthOpen < 10 && browRaise > 25) {
-      emotion = "你看起來蠻專心的 👀";
-    } else {
-      emotion = "情緒穩定 🙂";
-    }
-
-    lastDetectedTime = millis();
+  if (!gameStarted) {
+    textSize(28);
+    text("按任意鍵開始遊戲", width / 2, height / 2);
+    return;
   }
 
-  // 顯示情緒
-  if (millis() - lastDetectedTime < 3000) {
-    fill(0, 0, 0, 150);
-    rect(10, height - 50, width - 20, 40, 10);
-    fill(255);
-    textSize(24);
-    textAlign(CENTER, CENTER);
-    text("目前偵測到：" + emotion, width / 2, height - 30);
+  if (timer <= 0) {
+    textSize(32);
+    text("遊戲結束！最終分數：" + score, width / 2, height / 2);
+    noLoop();
+    return;
+  }
+
+  if (millis() - lastBubbleTime > 2000) {
+    let q = random(questionSet);
+    bubbles.push(new Bubble(q.text, q.correct));
+    lastBubbleTime = millis();
+  }
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    bubbles[i].update();
+    bubbles[i].display();
+    if (bubbles[i].offScreen()) bubbles.splice(i, 1);
+  }
+
+  drawHandAndDetect();
+}
+
+function keyPressed() {
+  if (!gameStarted) {
+    gameStarted = true;
+    timer = 60;
+    score = 0;
+    bubbles = [];
+    loop();
+  }
+}
+
+function drawHandAndDetect() {
+  if (predictions.length > 0) {
+    const hand = predictions[0].landmarks;
+    const thumbTip = hand[4];
+    const indexTip = hand[8];
+    const middleTip = hand[12];
+    const wrist = hand[0];
+
+    // 畫出手部
+    noFill();
+    stroke(0, 255, 0);
+    strokeWeight(2);
+    for (let pt of hand) ellipse(pt[0], pt[1], 8, 8);
+
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      let b = bubbles[i];
+      if (dist(indexTip[0], indexTip[1], b.x, b.y) < b.r) {
+        // 👍 判斷
+        if (thumbTip[1] < wrist[1] - 30) {
+          if (b.correct) score++;
+          else score--;
+          bubbles.splice(i, 1);
+        }
+        // ✋ 張手：食指與中指距離大（分開）
+        else if (dist(indexTip[0], indexTip[1], middleTip[0], middleTip[1]) > 40) {
+          if (!b.correct) score++;
+          else score--;
+          bubbles.splice(i, 1);
+        }
+      }
+    }
+  }
+}
+
+class Bubble {
+  constructor(txt, correct) {
+    this.text = txt;
+    this.correct = correct;
+    this.x = random(100, width - 100);
+    this.y = -50;
+    this.r = 60;
+    this.speed = 2;
+  }
+
+  update() {
+    this.y += this.speed;
+  }
+
+  offScreen() {
+    return this.y > height + this.r;
+  }
+
+  display() {
+    fill(this.correct ? 'lightblue' : 'lightpink');
+    stroke(0);
+    ellipse(this.x, this.y, this.r * 2);
+    fill(0);
+    textSize(14);
+    text(this.text, this.x, this.y);
   }
 }
