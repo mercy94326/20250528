@@ -33,20 +33,37 @@ function setup() {
 }
 
 function draw() {
+  // 將畫面左右翻轉
+  push();
+  translate(width, 0);
+  scale(-1, 1);
   image(video, 0, 0, width, height);
+  pop();
+
   fill(255);
   textSize(20);
+  stroke(0);
+  strokeWeight(3);
   text(`分數：${score}  時間：${timer}`, width / 2, 20);
+  noStroke();
 
   if (!gameStarted) {
     textSize(28);
+    fill(255);
+    stroke(0);
+    strokeWeight(4);
     text("按任意鍵開始遊戲", width / 2, height / 2);
+    noStroke();
     return;
   }
 
   if (timer <= 0) {
     textSize(32);
+    fill(255);
+    stroke(0);
+    strokeWeight(4);
     text("遊戲結束！最終分數：" + score, width / 2, height / 2);
+    noStroke();
     noLoop();
     return;
   }
@@ -88,11 +105,11 @@ function drawHandAndDetect() {
     noFill();
     stroke(0, 255, 0);
     strokeWeight(2);
-    for (let pt of hand) ellipse(pt[0], pt[1], 8, 8);
+    for (let pt of hand) ellipse(width - pt[0], pt[1], 8, 8);
 
     for (let i = bubbles.length - 1; i >= 0; i--) {
       let b = bubbles[i];
-      if (dist(indexTip[0], indexTip[1], b.x, b.y) < b.r) {
+      if (dist(width - indexTip[0], indexTip[1], b.x, b.y) < b.r) {
         // 👍 判斷
         if (thumbTip[1] < wrist[1] - 30) {
           if (b.correct) score++;
@@ -133,7 +150,10 @@ class Bubble {
     stroke(0);
     ellipse(this.x, this.y, this.r * 2);
     fill(0);
-    textSize(14);
+    textSize(16);
+    stroke(255);
+    strokeWeight(4);
     text(this.text, this.x, this.y);
+    noStroke();
   }
 }
